@@ -46,6 +46,14 @@ def init_db():
             planned_contract_date TEXT, actual_contract_date TEXT, comments TEXT, status TEXT, is_deleted INTEGER DEFAULT 0, deleted_by TEXT, deleted_at TEXT
         )''')
     
+    # --- SCHEMA MIGRATION ---
+    # Forces SQLite to append new columns if the persistent database is using an older schema
+    try: c.execute("ALTER TABLE tenders ADD COLUMN budget REAL DEFAULT 0.0")
+    except sqlite3.OperationalError: pass
+    
+    try: c.execute("ALTER TABLE tenders ADD COLUMN source_of_funds TEXT")
+    except sqlite3.OperationalError: pass
+    
     c.execute('''CREATE TABLE IF NOT EXISTS dropdowns (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, label TEXT, color TEXT)''')
     
     c.execute("SELECT count(*) FROM dropdowns")
