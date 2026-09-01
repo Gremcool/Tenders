@@ -4,7 +4,7 @@ import os
 import time
 import json
 from datetime import datetime
-from st_aggrid import AgGrid, GridOptionsBuilder, DataReturnMode, GridUpdateMode, JsCode
+from st_aggrid import AgGrid, GridOptionsBuilder, DataReturnMode, JsCode
 from streamlit_quill import st_quill
 import plotly.express as px
 import db
@@ -114,11 +114,11 @@ def manage_dropdowns_dialog():
         with c1: new_c = st.color_picker("Color", opt['color'], key=f"c_{opt['id']}", label_visibility="collapsed")
         with c2: new_l = st.text_input("Label", opt['label'], key=f"l_{opt['id']}", label_visibility="collapsed")
         with c3:
-            if st.button("💾 Update", key=f"save_{opt['id']}", use_container_width=True):
+            if st.button("💾 Update", key=f"save_{opt['id']}", width="stretch"):
                 db.update_dropdown(opt['id'], new_l.strip(), new_c)
                 st.rerun()
         with c4: 
-            if st.button("❌ Del", key=f"del_{opt['id']}", use_container_width=True):
+            if st.button("❌ Del", key=f"del_{opt['id']}", width="stretch"):
                 db.delete_dropdown(opt['id'])
                 st.rerun()
                 
@@ -128,7 +128,7 @@ def manage_dropdowns_dialog():
     with nc2: new_label = st.text_input("Option Label", key="new_lab")
     with nc3: 
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("Add Option", type="primary", use_container_width=True):
+        if st.button("Add Option", type="primary", width="stretch"):
             if new_label:
                 db.add_dropdown(active_cat, new_label.strip(), new_color)
                 st.rerun()
@@ -239,7 +239,7 @@ with tab_dash:
         sla_days = st.number_input("🚨 SLA Red-Line (Days)", min_value=1, value=21)
     with col_custom_col:
         st.markdown("<div class='align-btn'>", unsafe_allow_html=True)
-        with st.popover("➕ Add Custom Column", use_container_width=True):
+        with st.popover("➕ Add Custom Column", width="stretch"):
             new_col_name = st.text_input("Column Name")
             if st.button("Add to Grid") and new_col_name:
                 db.add_custom_column(new_col_name.strip())
@@ -247,7 +247,7 @@ with tab_dash:
         st.markdown("</div>", unsafe_allow_html=True)
     with col_config:
         st.markdown("<div class='align-btn'>", unsafe_allow_html=True)
-        if st.button("⚙️ Settings (Colors & Dropdowns)", use_container_width=True): manage_dropdowns_dialog()
+        if st.button("⚙️ Settings (Colors & Dropdowns)", width="stretch"): manage_dropdowns_dialog()
         st.markdown("</div>", unsafe_allow_html=True)
 
     # --- PRIMARY KPI MATH ---
@@ -286,7 +286,8 @@ with tab_dash:
     
     if 'Actual contract date' in f_df and 'SMT date' in f_df:
         f_df['Calc_Contract_Date'] = f_df['Actual contract date'].fillna(pd.to_datetime(today_str))
-        f_df['Overall_Days'] = (f_df['Calc_Contract_Date'] - f_df['SMT date']).dt.days
+        f_df['Calc_Start_Date'] = f_df['SMT date'].fillna(f_df.get('Submitted date to ITC for TD approval'))
+        f_df['Overall_Days'] = (f_df['Calc_Contract_Date'] - f_df['Calc_Start_Date']).dt.days
 
     if 'Budget FRW' in f_df.columns:
         f_df['Budget FRW'] = pd.to_numeric(f_df['Budget FRW'], errors='coerce').fillna(0)
@@ -349,7 +350,6 @@ with tab_dash:
     
     display_df = f_df.copy()
     
-    # 🚨 RENAME MATH COLUMNS FOR THE UI
     display_df.rename(columns={
         'Stage1_Days': 'TD Approval (Days)',
         'Stage2_Days': 'Market (Days)',
@@ -358,32 +358,36 @@ with tab_dash:
         'Days_to_Close': 'Days Open'
     }, inplace=True)
 
-    # Format Date Columns to text representation to avoid AgGrid errors
     for c in ALL_DATE_COLS:
         if c in display_df: display_df[c] = display_df[c].dt.strftime('%Y-%m-%d').fillna('')
 
-    # Define exact logical ordering to perfectly cluster computed math directly next to source dates
+    calc_cols = ['TD Approval (Days)', 'Market (Days)', 'Evaluation (Days)', 'Overall Lifecycle (Days)', 'Days Open']
+    for c in calc_cols:
+        if c in display_df.columns:
+            display_df[c] = display_df[c].apply(lambda x: str(int(x)) if pd.notna(x) else "")
+
     logical_col_order = [
         'S/N', 'Tender reference number', 'Title of the tender', 'Current status', 'Category', 'Method of tender', 'Responsible officer', 'ITC Team', 'Budget FRW', 'Source of funds', 
         'SMT date', 
         'Submitted date to ITC for TD approval', 'Feedback from ITC on TD (date)', 'TD Approval (Days)',
         'Planned Publication date', 'Actual Publication date', 'Planned Bid opening date', 'Actual Bid Opening date', 'Market (Days)',
         'Date bids are submitted for ITC evaluation', 'Date evaluation report is released from ITC', 'Evaluation (Days)',
-        'Planned Provisional Notification date', 'Actual provisional Notification date ', 'Planned Contract signing date', 'Actual contract date', 'Date awarded', 'Overall Lifecycle (Days)',
-        'Days Open', 'Comments '
+        'Planned Provisional Notification date', 'Actual provisional Notification date ', 'Planned Contract signing date', 'Actual contract date', 'Overall Lifecycle (Days)',
+        'Date awarded', 'Days Open',
+        'Comments '
     ]
 
-    # Reorder display_df physically in memory
     ordered_cols = [c for c in logical_col_order if c in display_df.columns]
     for c in display_df.columns:
         if c not in ordered_cols: ordered_cols.append(c)
     display_df = display_df[ordered_cols]
 
-    # Explicitly drop completely unused routing fields
-    drop_cols = ['id', 'fiscal_year', 'Sub_Date', 'Award_Date', 'Calc_Award_Date', 'Calc_Contract_Date', 'Is_Overdue']
+    drop_cols = ['id', 'fiscal_year', 'Sub_Date', 'Award_Date', 'Calc_Award_Date', 'Calc_Contract_Date', 'Calc_Start_Date', 'Is_Overdue']
     display_df = display_df.drop(columns=[c for c in drop_cols if c in display_df.columns])
 
     gb = GridOptionsBuilder.from_dataframe(display_df)
+    
+    if 'Is_Overdue' in display_df.columns: gb.configure_column('Is_Overdue', hide=True)
     
     gb.configure_default_column(
         wrapText=True, 
@@ -393,7 +397,6 @@ with tab_dash:
         tooltipValueGetter=JsCode("function(params) { return params.value ? String(params.value) : ''; }")
     )
     
-    # 🚨 DYNAMIC JAVASCRIPT VALUE GETTERS FOR INSTANT REAL-TIME UPDATES (NO FLASH)
     stage1_vg = JsCode("""function(params) { 
         let s = params.data['Submitted date to ITC for TD approval']; 
         let e = params.data['Feedback from ITC on TD (date)']; 
@@ -415,10 +418,11 @@ with tab_dash:
         return Math.round((new Date(e) - new Date(s))/(1000*60*60*24)); 
     }""")
     
-    # 🚨 BULLETPROOF OVERALL LIFECYCLE: Checks SMT Date. Stops at Contract Date or Today.
     overall_vg = JsCode("""function(params) { 
         let s = params.data['SMT date']; 
+        if (!s || s.trim() === '') s = params.data['Submitted date to ITC for TD approval'];
         if (!s || s.trim() === '') return ''; 
+        
         let e = params.data['Actual contract date']; 
         let d2 = (e && e.trim() !== '') ? new Date(e) : new Date(); 
         return Math.round((d2 - new Date(s))/(1000*60*60*24)); 
@@ -432,7 +436,6 @@ with tab_dash:
         return Math.round((d2 - new Date(s))/(1000*60*60*24)); 
     }""")
 
-    # Attach computed columns securely to grid (Locking them out of editing)
     gb.configure_column('TD Approval (Days)', valueGetter=stage1_vg, editable=False, width=130)
     gb.configure_column('Market (Days)', valueGetter=stage2_vg, editable=False, width=130)
     gb.configure_column('Evaluation (Days)', valueGetter=stage3_vg, editable=False, width=130)
@@ -442,7 +445,6 @@ with tab_dash:
     for col in display_df.columns:
         gb.configure_column(col, headerTooltip=col)
     
-    # Apply Special Formatting to distinguish Computed Math Columns clearly from User Inputs
     dynamic_cellstyle = JsCode(f"""
     function(params) {{
         if (!params.colDef || !params.colDef.field) return null;
@@ -473,7 +475,6 @@ with tab_dash:
             return {{'backgroundColor': bgColor, 'color': tColor, 'fontWeight': 'bold'}};
         }}
         
-        // COMPUTED COLUMNS SPECIAL HIGHLIGHT (Gray Background, Blue Bold Text)
         const computedCols = ['TD Approval (Days)', 'Market (Days)', 'Evaluation (Days)', 'Overall Lifecycle (Days)', 'Days Open'];
         if (computedCols.includes(field)) {{
             return {{'backgroundColor': '#e9ecef', 'color': '#0275d8', 'fontWeight': '900', 'borderLeft': '3px solid #0275d8'}};
@@ -497,7 +498,8 @@ with tab_dash:
         singleClickEdit=True, 
         domLayout='autoHeight', 
         getRowStyle=dynamic_cellstyle,
-        enableBrowserTooltips=True
+        enableBrowserTooltips=True,
+        update_on=['cellValueChanged', 'selectionChanged']
     )
     gb.configure_selection(selection_mode="single", use_checkbox=True)
     
@@ -523,17 +525,15 @@ with tab_dash:
         ".ag-header-cell-label": {"color": "white !important", "font-weight": "bold !important"}
     }
     
-    # 🚨 KEY CHANGE: CHANGED KEY TO _v3 TO BUST BROWSER CACHE AND FORCE COLUMN REORDERING
     grid_response = AgGrid(
         display_df, 
         gridOptions=gb.build(), 
-        update_mode=GridUpdateMode.MODEL_CHANGED | GridUpdateMode.SELECTION_CHANGED, 
         data_return_mode=DataReturnMode.AS_INPUT, 
         fit_columns_on_grid_load=False, 
         theme='streamlit', 
         allow_unsafe_jscode=True, 
         custom_css=custom_css,
-        key="tender_main_grid_v3"
+        key="tender_main_grid_v5"
     )
 
     # --- ADVANCED EDITOR PLACEMENT ---
@@ -549,12 +549,12 @@ with tab_dash:
             st.markdown("### 🛠️ Selected Tender Actions")
             c1, c2, _ = st.columns([2, 2, 8])
             with c1:
-                if st.button("✏️ Edit Advanced Details", type="primary", use_container_width=True): edit_row_dialog(selected_data, selected_fy)
+                if st.button("✏️ Edit Advanced Details", type="primary", width="stretch"): edit_row_dialog(selected_data, selected_fy)
             with c2:
-                if st.button("🗑️ Delete Selected Row", type="secondary", use_container_width=True): delete_row_dialog(selected_data)
+                if st.button("🗑️ Delete Selected Row", type="secondary", width="stretch"): delete_row_dialog(selected_data)
             st.markdown("<hr style='margin: 10px 0px;'/>", unsafe_allow_html=True)
 
-    # --- SQLITE INLINE EDIT SYNC (SPEED OPTIMIZED & BULLETPROOFED) ---
+    # --- SQLITE INLINE EDIT SYNC ---
     edited_df = grid_response['data']
     needs_rerun = False
     reverse_map = {v: k for k, v in db.RENAME_MAP.items()}
