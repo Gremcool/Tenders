@@ -50,7 +50,6 @@ st.markdown("""
         div[data-baseweb="tab"] { background-color: transparent !important; border-radius: 6px !important; padding-top: 8px !important; padding-bottom: 8px !important; margin: 0px !important; }
         div[data-baseweb="tab"][aria-selected="true"] { background-color: #ffffff !important; box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important; border: 1px solid #cce5ff !important; }
         
-        /* Action Button Alignments */
         .align-btn { display: flex; align-items: flex-end; height: 100%; padding-bottom: 2px;}
     </style>
 """, unsafe_allow_html=True)
@@ -110,7 +109,6 @@ def manage_dropdowns_dialog():
     options = db.get_dropdowns(active_cat)
     st.markdown("---")
     
-    # Editable existing options
     for opt in options:
         c1, c2, c3, c4 = st.columns([1, 4, 1.5, 1.5])
         with c1: new_c = st.color_picker("Color", opt['color'], key=f"c_{opt['id']}", label_visibility="collapsed")
@@ -285,22 +283,37 @@ with tab_dash:
         f_df['Stage2_Days'] = (f_df['Actual Bid Opening date'] - f_df['Actual Publication date']).dt.days
     if 'Date evaluation report is released from ITC' in f_df and 'Date bids are submitted for ITC evaluation' in f_df:
         f_df['Stage3_Days'] = (f_df['Date evaluation report is released from ITC'] - f_df['Date bids are submitted for ITC evaluation']).dt.days
+    
     if 'Actual contract date' in f_df and 'SMT date' in f_df:
-        f_df['Overall_Days'] = (f_df['Actual contract date'] - f_df['SMT date']).dt.days
+        f_df['Calc_Contract_Date'] = f_df['Actual contract date'].fillna(pd.to_datetime(today_str))
+        f_df['Overall_Days'] = (f_df['Calc_Contract_Date'] - f_df['SMT date']).dt.days
 
-    f_df['Budget FRW'] = pd.to_numeric(f_df.get('Budget FRW', 0), errors='coerce').fillna(0)
+    if 'Budget FRW' in f_df.columns:
+        f_df['Budget FRW'] = pd.to_numeric(f_df['Budget FRW'], errors='coerce').fillna(0)
+    else:
+        f_df['Budget FRW'] = 0.0
 
-    # --- ADVANCED EXPANDER (Open by Default) ---
+    s1_avg = f_df.get('Stage1_Days', pd.Series(dtype=float)).mean()
+    s2_avg = f_df.get('Stage2_Days', pd.Series(dtype=float)).mean()
+    s3_avg = f_df.get('Stage3_Days', pd.Series(dtype=float)).mean()
+    oa_avg = f_df.get('Overall_Days', pd.Series(dtype=float)).mean()
+
+    s1_display = f"{s1_avg:.1f}" if pd.notna(s1_avg) else "-"
+    s2_display = f"{s2_avg:.1f}" if pd.notna(s2_avg) else "-"
+    s3_display = f"{s3_avg:.1f}" if pd.notna(s3_avg) else "-"
+    oa_display = f"{oa_avg:.1f}" if pd.notna(oa_avg) else "-"
+
+    # --- ADVANCED EXPANDER ---
     with st.expander("📈 View Advanced Efficiency KPIs & Allocation Charts", expanded=True):
         tab_eff, tab_closure_chart, tab_itc_chart, tab_officer_chart = st.tabs(["🚀 Efficiency Stage KPIs", "📊 Days taken to close a tender", "📊 ITC Status Distribution", "📊 Officer Workload Allocation"])
         
         with tab_eff:
             e1, e2, e3, e4, e5 = st.columns(5)
             e1.markdown(f"<div class='eff-card bg-green'><div class='eff-title'>Total Budget (Filtered)</div><div class='eff-value' style='color:#28a745;'>{format_budget(f_df['Budget FRW'].sum())}</div><div class='eff-sub'>{len(f_df)} Active Tenders</div></div>", unsafe_allow_html=True)
-            e2.markdown(f"<div class='eff-card bg-purple'><div class='eff-title'>TD Approval Stage</div><div class='eff-value' style='color:#6f42c1;'>{f_df.get('Stage1_Days', pd.Series(dtype=float)).mean():.1f} <span style='font-size:12px'>Days</span></div><div class='eff-sub'>Submission -> Feedback</div></div>", unsafe_allow_html=True)
-            e3.markdown(f"<div class='eff-card bg-blue'><div class='eff-title'>Market Stage</div><div class='eff-value' style='color:#007bff;'>{f_df.get('Stage2_Days', pd.Series(dtype=float)).mean():.1f} <span style='font-size:12px'>Days</span></div><div class='eff-sub'>Publication -> Bid Opening</div></div>", unsafe_allow_html=True)
-            e4.markdown(f"<div class='eff-card bg-orange'><div class='eff-title'>Evaluation Stage</div><div class='eff-value' style='color:#fd7e14;'>{f_df.get('Stage3_Days', pd.Series(dtype=float)).mean():.1f} <span style='font-size:12px'>Days</span></div><div class='eff-sub'>Bids to ITC -> Eval Report</div></div>", unsafe_allow_html=True)
-            e5.markdown(f"<div class='eff-card bg-dark'><div class='eff-title'>OVERALL LIFECYCLE</div><div class='eff-value' style='color:white;'>{f_df.get('Overall_Days', pd.Series(dtype=float)).mean():.1f} <span style='font-size:12px; color:#e0f7fa;'>Days</span></div><div class='eff-sub'>SMT Date -> Contract Signed</div></div>", unsafe_allow_html=True)
+            e2.markdown(f"<div class='eff-card bg-purple'><div class='eff-title'>TD Approval Stage</div><div class='eff-value' style='color:#6f42c1;'>{s1_display} <span style='font-size:12px'>Days</span></div><div class='eff-sub'>Submission -> Feedback</div></div>", unsafe_allow_html=True)
+            e3.markdown(f"<div class='eff-card bg-blue'><div class='eff-title'>Market Stage</div><div class='eff-value' style='color:#007bff;'>{s2_display} <span style='font-size:12px'>Days</span></div><div class='eff-sub'>Publication -> Bid Opening</div></div>", unsafe_allow_html=True)
+            e4.markdown(f"<div class='eff-card bg-orange'><div class='eff-title'>Evaluation Stage</div><div class='eff-value' style='color:#fd7e14;'>{s3_display} <span style='font-size:12px'>Days</span></div><div class='eff-sub'>Bids to ITC -> Eval Report</div></div>", unsafe_allow_html=True)
+            e5.markdown(f"<div class='eff-card bg-dark'><div class='eff-title'>OVERALL LIFECYCLE</div><div class='eff-value' style='color:white;'>{oa_display} <span style='font-size:12px; color:#e0f7fa;'>Days</span></div><div class='eff-sub'>SMT Date -> Contract Signed</div></div>", unsafe_allow_html=True)
 
         color_map = {'Awarded': '#28a745', 'Cancelled': '#dc3545', 'Under Evaluation': '#ffc107', 'Published': '#17a2b8', 'Planned': '#6c757d', 'Draft': '#adb5bd'}
 
@@ -335,13 +348,43 @@ with tab_dash:
     action_container_top = st.empty() 
     
     display_df = f_df.copy()
+    
+    # 🚨 RENAME MATH COLUMNS FOR THE UI
+    display_df.rename(columns={
+        'Stage1_Days': 'TD Approval (Days)',
+        'Stage2_Days': 'Market (Days)',
+        'Stage3_Days': 'Evaluation (Days)',
+        'Overall_Days': 'Overall Lifecycle (Days)',
+        'Days_to_Close': 'Days Open'
+    }, inplace=True)
+
+    # Format Date Columns to text representation to avoid AgGrid errors
     for c in ALL_DATE_COLS:
         if c in display_df: display_df[c] = display_df[c].dt.strftime('%Y-%m-%d').fillna('')
 
-    drop_cols = ['id', 'fiscal_year', 'Sub_Date', 'Award_Date', 'Calc_Award_Date', 'Days_to_Close', 'Is_Overdue', 'Stage1_Days', 'Stage2_Days', 'Stage3_Days', 'Overall_Days']
-    gb = GridOptionsBuilder.from_dataframe(display_df.drop(columns=[c for c in drop_cols if c in display_df.columns]))
+    # Define exact logical ordering to perfectly cluster computed math directly next to source dates
+    logical_col_order = [
+        'S/N', 'Tender reference number', 'Title of the tender', 'Current status', 'Category', 'Method of tender', 'Responsible officer', 'ITC Team', 'Budget FRW', 'Source of funds', 
+        'SMT date', 
+        'Submitted date to ITC for TD approval', 'Feedback from ITC on TD (date)', 'TD Approval (Days)',
+        'Planned Publication date', 'Actual Publication date', 'Planned Bid opening date', 'Actual Bid Opening date', 'Market (Days)',
+        'Date bids are submitted for ITC evaluation', 'Date evaluation report is released from ITC', 'Evaluation (Days)',
+        'Planned Provisional Notification date', 'Actual provisional Notification date ', 'Planned Contract signing date', 'Actual contract date', 'Date awarded', 'Overall Lifecycle (Days)',
+        'Days Open', 'Comments '
+    ]
+
+    # Reorder display_df physically in memory
+    ordered_cols = [c for c in logical_col_order if c in display_df.columns]
+    for c in display_df.columns:
+        if c not in ordered_cols: ordered_cols.append(c)
+    display_df = display_df[ordered_cols]
+
+    # Explicitly drop completely unused routing fields
+    drop_cols = ['id', 'fiscal_year', 'Sub_Date', 'Award_Date', 'Calc_Award_Date', 'Calc_Contract_Date', 'Is_Overdue']
+    display_df = display_df.drop(columns=[c for c in drop_cols if c in display_df.columns])
+
+    gb = GridOptionsBuilder.from_dataframe(display_df)
     
-    # 1. Enable Tooltips on all columns by default
     gb.configure_default_column(
         wrapText=True, 
         autoHeight=True, 
@@ -350,11 +393,56 @@ with tab_dash:
         tooltipValueGetter=JsCode("function(params) { return params.value ? String(params.value) : ''; }")
     )
     
-    # Enable header tooltips on ALL columns
+    # 🚨 DYNAMIC JAVASCRIPT VALUE GETTERS FOR INSTANT REAL-TIME UPDATES (NO FLASH)
+    stage1_vg = JsCode("""function(params) { 
+        let s = params.data['Submitted date to ITC for TD approval']; 
+        let e = params.data['Feedback from ITC on TD (date)']; 
+        if(!s || s === '' || !e || e === '') return ''; 
+        return Math.round((new Date(e) - new Date(s))/(1000*60*60*24)); 
+    }""")
+    
+    stage2_vg = JsCode("""function(params) { 
+        let s = params.data['Actual Publication date']; 
+        let e = params.data['Actual Bid Opening date']; 
+        if(!s || s === '' || !e || e === '') return ''; 
+        return Math.round((new Date(e) - new Date(s))/(1000*60*60*24)); 
+    }""")
+    
+    stage3_vg = JsCode("""function(params) { 
+        let s = params.data['Date bids are submitted for ITC evaluation']; 
+        let e = params.data['Date evaluation report is released from ITC']; 
+        if(!s || s === '' || !e || e === '') return ''; 
+        return Math.round((new Date(e) - new Date(s))/(1000*60*60*24)); 
+    }""")
+    
+    # 🚨 BULLETPROOF OVERALL LIFECYCLE: Checks SMT Date. Stops at Contract Date or Today.
+    overall_vg = JsCode("""function(params) { 
+        let s = params.data['SMT date']; 
+        if (!s || s.trim() === '') return ''; 
+        let e = params.data['Actual contract date']; 
+        let d2 = (e && e.trim() !== '') ? new Date(e) : new Date(); 
+        return Math.round((d2 - new Date(s))/(1000*60*60*24)); 
+    }""")
+    
+    days_open_vg = JsCode("""function(params) { 
+        let s = params.data['Submitted date to ITC for TD approval']; 
+        if(!s || s.trim() === '') return ''; 
+        let e = params.data['Date awarded']; 
+        let d2 = (e && e.trim() !== '') ? new Date(e) : new Date(); 
+        return Math.round((d2 - new Date(s))/(1000*60*60*24)); 
+    }""")
+
+    # Attach computed columns securely to grid (Locking them out of editing)
+    gb.configure_column('TD Approval (Days)', valueGetter=stage1_vg, editable=False, width=130)
+    gb.configure_column('Market (Days)', valueGetter=stage2_vg, editable=False, width=130)
+    gb.configure_column('Evaluation (Days)', valueGetter=stage3_vg, editable=False, width=130)
+    gb.configure_column('Overall Lifecycle (Days)', valueGetter=overall_vg, editable=False, width=130)
+    gb.configure_column('Days Open', valueGetter=days_open_vg, editable=False, width=110)
+    
     for col in display_df.columns:
         gb.configure_column(col, headerTooltip=col)
     
-    # 🚨 DYNAMIC BOLD STAGE COLOR BANDING & HIGHLIGHTS
+    # Apply Special Formatting to distinguish Computed Math Columns clearly from User Inputs
     dynamic_cellstyle = JsCode(f"""
     function(params) {{
         if (!params.colDef || !params.colDef.field) return null;
@@ -365,7 +453,6 @@ with tab_dash:
         const field = params.colDef.field;
         let bgColor = null;
         let tColor = 'black';
-        let fWeight = 'normal';
         
         if (params.data.Is_Overdue === true) {{
             return {{'backgroundColor': '#ffebee', 'color': 'black'}};
@@ -386,6 +473,12 @@ with tab_dash:
             return {{'backgroundColor': bgColor, 'color': tColor, 'fontWeight': 'bold'}};
         }}
         
+        // COMPUTED COLUMNS SPECIAL HIGHLIGHT (Gray Background, Blue Bold Text)
+        const computedCols = ['TD Approval (Days)', 'Market (Days)', 'Evaluation (Days)', 'Overall Lifecycle (Days)', 'Days Open'];
+        if (computedCols.includes(field)) {{
+            return {{'backgroundColor': '#e9ecef', 'color': '#0275d8', 'fontWeight': '900', 'borderLeft': '3px solid #0275d8'}};
+        }}
+        
         const stage1Cols = ['Submitted date to ITC for TD approval', 'Feedback from ITC on TD (date)'];
         const stage2Cols = ['Planned Publication date', 'Actual Publication date', 'Planned Bid opening date', 'Actual Bid Opening date'];
         const stage3Cols = ['Date bids are submitted for ITC evaluation', 'Date evaluation report is released from ITC'];
@@ -400,7 +493,6 @@ with tab_dash:
     }}
     """)
 
-    # 2. Enable browser tooltips grid option
     gb.configure_grid_options(
         singleClickEdit=True, 
         domLayout='autoHeight', 
@@ -414,25 +506,35 @@ with tab_dash:
 
     for col in ALL_DATE_COLS:
         if col in display_df.columns:
-            gb.configure_column(col, editable=True, width=160, cellEditor=custom_date_editor, valueFormatter=date_formatter, cellStyle=dynamic_cellstyle, headerTooltip=col)
+            gb.configure_column(col, editable=True, width=160, cellEditor=custom_date_editor, valueFormatter=date_formatter, cellStyle=dynamic_cellstyle)
 
-    if 'Budget FRW' in display_df.columns: gb.configure_column('Budget FRW', type=["numericColumn"], editable=True, headerTooltip='Budget FRW')
-    if 'Current status' in display_df.columns: gb.configure_column("Current status", editable=True, cellEditor='agSelectCellEditor', cellEditorParams={'values': STATUS_OPTIONS}, width=150, pinned='right', cellStyle=dynamic_cellstyle, headerTooltip="Current status")
-    if 'Category' in display_df.columns: gb.configure_column("Category", editable=True, cellEditor='agSelectCellEditor', cellEditorParams={'values': CAT_OPTIONS}, width=150, cellStyle=dynamic_cellstyle, headerTooltip="Category")
-    if 'ITC Team' in display_df.columns: gb.configure_column("ITC Team", editable=True, cellEditor='agSelectCellEditor', cellEditorParams={'values': ITC_OPTIONS}, width=120, cellStyle=dynamic_cellstyle, headerTooltip="ITC Team")
-    if 'Method of tender' in display_df.columns: gb.configure_column("Method of tender", editable=True, cellEditor='agSelectCellEditor', cellEditorParams={'values': METHOD_OPTIONS}, width=160, headerTooltip="Method of tender")
-    if 'S/N' in display_df.columns: gb.configure_column('S/N', width=80, pinned='left', checkboxSelection=True, headerTooltip='S/N')
-    if 'Tender reference number' in display_df.columns: gb.configure_column('Tender reference number', width=250, pinned='left', editable=False, headerTooltip='Tender reference number')
-    
-    # Reduced the title of the tender column by one third (from 600 down to 400)
-    if 'Title of the tender' in display_df.columns: gb.configure_column('Title of the tender', width=400, minWidth=400, headerTooltip='Title of the tender')
+    if 'Budget FRW' in display_df.columns: gb.configure_column('Budget FRW', type=["numericColumn"], editable=True)
+    if 'Current status' in display_df.columns: gb.configure_column("Current status", editable=True, cellEditor='agSelectCellEditor', cellEditorParams={'values': STATUS_OPTIONS}, width=150, pinned='right', cellStyle=dynamic_cellstyle)
+    if 'Category' in display_df.columns: gb.configure_column("Category", editable=True, cellEditor='agSelectCellEditor', cellEditorParams={'values': CAT_OPTIONS}, width=150, cellStyle=dynamic_cellstyle)
+    if 'ITC Team' in display_df.columns: gb.configure_column("ITC Team", editable=True, cellEditor='agSelectCellEditor', cellEditorParams={'values': ITC_OPTIONS}, width=120, cellStyle=dynamic_cellstyle)
+    if 'Method of tender' in display_df.columns: gb.configure_column("Method of tender", editable=True, cellEditor='agSelectCellEditor', cellEditorParams={'values': METHOD_OPTIONS}, width=160)
+    if 'S/N' in display_df.columns: gb.configure_column('S/N', width=80, pinned='left', checkboxSelection=True)
+    if 'Tender reference number' in display_df.columns: gb.configure_column('Tender reference number', width=250, pinned='left', editable=False)
+    if 'Title of the tender' in display_df.columns: gb.configure_column('Title of the tender', width=400, minWidth=400)
 
     custom_css = {
         ".ag-header": {"background-color": "#0275d8 !important", "border-bottom": "2px solid #0056b3 !important"},
         ".ag-header-row": {"background-color": "#0275d8 !important", "color": "white !important"},
         ".ag-header-cell-label": {"color": "white !important", "font-weight": "bold !important"}
     }
-    grid_response = AgGrid(display_df, gridOptions=gb.build(), update_mode=GridUpdateMode.MODEL_CHANGED | GridUpdateMode.SELECTION_CHANGED, data_return_mode=DataReturnMode.AS_INPUT, fit_columns_on_grid_load=False, theme='streamlit', allow_unsafe_jscode=True, custom_css=custom_css)
+    
+    # 🚨 KEY CHANGE: CHANGED KEY TO _v3 TO BUST BROWSER CACHE AND FORCE COLUMN REORDERING
+    grid_response = AgGrid(
+        display_df, 
+        gridOptions=gb.build(), 
+        update_mode=GridUpdateMode.MODEL_CHANGED | GridUpdateMode.SELECTION_CHANGED, 
+        data_return_mode=DataReturnMode.AS_INPUT, 
+        fit_columns_on_grid_load=False, 
+        theme='streamlit', 
+        allow_unsafe_jscode=True, 
+        custom_css=custom_css,
+        key="tender_main_grid_v3"
+    )
 
     # --- ADVANCED EDITOR PLACEMENT ---
     selected_rows = grid_response.get("selected_rows")
@@ -452,23 +554,21 @@ with tab_dash:
                 if st.button("🗑️ Delete Selected Row", type="secondary", use_container_width=True): delete_row_dialog(selected_data)
             st.markdown("<hr style='margin: 10px 0px;'/>", unsafe_allow_html=True)
 
-    # --- SQLITE INLINE EDIT SYNC (SPEED OPTIMIZED) ---
+    # --- SQLITE INLINE EDIT SYNC (SPEED OPTIMIZED & BULLETPROOFED) ---
     edited_df = grid_response['data']
     needs_rerun = False
     reverse_map = {v: k for k, v in db.RENAME_MAP.items()}
-    
-    skip_columns = ['_selectedRowNodeInfo', 'Is_Overdue', 'Sub_Date', 'Award_Date', 'Calc_Award_Date', 'Days_to_Close', 'Stage1_Days', 'Stage2_Days', 'Stage3_Days', 'Overall_Days']
+    valid_db_cols = list(db.RENAME_MAP.values()) 
 
     for index, new_row in edited_df.iterrows():
-        if 'id' not in new_row or pd.isna(new_row['id']): continue
-        db_id = int(new_row['id'])
-        
-        old_row_match = df[df['id'] == db_id]
+        t_ref = new_row.get('Tender reference number', '')
+        old_row_match = df[df['Tender reference number'] == t_ref]
         if old_row_match.empty: continue
         old_row = old_row_match.iloc[0]
+        db_id = int(old_row['id'])
         
         for col in edited_df.columns:
-            if col in skip_columns: continue
+            if col not in valid_db_cols: continue 
             
             db_col = reverse_map.get(col, col) 
             old_val = str(old_row.get(col, "")).strip() if pd.notna(old_row.get(col, "")) else ""
@@ -478,7 +578,7 @@ with tab_dash:
                 if col in ALL_DATE_COLS:
                     parsed_dt = pd.to_datetime(new_val, errors='coerce')
                     new_val = parsed_dt.strftime('%Y-%m-%d') if pd.notna(parsed_dt) else ""
-                    needs_rerun = True
+                    needs_rerun = True 
                 
                 db.update_single_cell(db_id, db_col, new_val)
     
